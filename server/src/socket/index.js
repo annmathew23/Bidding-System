@@ -1,10 +1,10 @@
-import { registerBidHandlers } from "./bid.handlers.js";
+import { registerBidPlacedHandler } from "./bid.handlers.js";
 
-export function setupSocket(io) {
+export default function registerBidHandlers(io) {
   io.on("connection", (socket) => {
     console.log("Socket connected:", socket.id);
 
-    registerBidHandlers(io, socket);
+    registerBidPlacedHandler(io, socket);
 
     socket.on("disconnect", () => {
       console.log("Socket disconnected:", socket.id);

@@ -1,41 +1,32 @@
 import { items } from "../store/items.store.js";
-import { getItemLock } from "../lock/items.locks.js";
 
-export function registerBidHandlers(io, socket) {
-  socket.on("BID_PLACED", async (payload, ack) => {
-    const { itemId, bidderId, amount } = payload || {};
+export function registerBidPlacedHandler(io, socket) {
+  socket.on("BID_PLACED", ({ itemId, amount, bidderId }, ack) => {
+    const item = items.find((i) => i.id === itemId);
 
-    if (!itemId || !bidderId || typeof amount !== "number") {
-      return ack?.({ ok: false, code: "BAD_REQUEST", message: "Invalid payload" });
+    if (!item) {
+      return ack?.({ ok: false, error: "Item not found" });
     }
 
-    const lock = getItemLock(itemId);
+    if (Date.now() > item.endsAt) {
+      return ack?.({ ok: false, error: "Auction ended" });
+    }
 
-    await lock.runExclusive(async () => {
-      const item = items.find((it) => it.id === itemId);
-      if (!item) return ack?.({ ok: false, code: "NOT_FOUND", message: "Item not found" });
+    if (amount <= item.currentBid) {
+      return ack?.({ ok: false, error: "Outbid" });
+    }
 
-      const now = Date.now();
 
-      if (now >= item.endTimeMs) {
-        return ack?.({ ok: false, code: "AUCTION_ENDED", message: "Auction ended" });
-      }
+    item.currentBid = amount;
+    item.highestBidderId = bidderId;
 
-      if (amount <= item.currentBid) {
-        return ack?.({ ok: false, code: "OUTBID", message: "Outbid" });
-      }
-
-      item.currentBid = amount;
-      item.highestBidderId = bidderId;
-
-      io.emit("UPDATE_BID", {
-        itemId: item.id,
-        currentBid: item.currentBid,
-        highestBidderId: item.highestBidderId,
-        serverTimeMs: now,
-      });
-
-      return ack?.({ ok: true });
+    io.emit("UPDATE_BID", {
+      itemId,
+      currentBid: item.currentBid,
+      highestBidderId: bidderId,
+      serverTimeMs: Date.now(),
     });
+
+    ack?.({ ok: true });
   });
 }
